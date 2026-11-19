@@ -18,7 +18,7 @@ Usage:
   ./run.sh <agent-dir>          Replay every saved fact for that agent folder
   ./run.sh current              Print the live round
   ./run.sh sync [options]       Download Animal Husbandry standings and non-crown artifacts
-  ./run.sh dashboard [options]  Open the per-round web dashboard
+  ./run.sh dashboard [options]  Serve the replay dashboard under pm2 (0.0.0.0:8780)
   ./run.sh install              Install the neverplayalone_bench environment
   ./run.sh replay <agent-dir>   Same as passing the folder directly
 
@@ -31,7 +31,75 @@ Sync options are passed through:
 
 Only Animal Husbandry rounds are saved. Other missions are removed.
 The reigning crown is listed in the dashboard and is not downloaded.
+
+Dashboard options:
+  --host 0.0.0.0       bind address (default 0.0.0.0)
+  --port 8780          port (default 8780)
 EOF
+}
+
+DASH_NAME="${NPA_REPLAY_PM2_NAME:-npa-replay}"
+
+require_pm2() {
+  command -v pm2 >/dev/null 2>&1 || {
+    echo "pm2 not found. Install with: npm install -g pm2" >&2
+    exit 1
+  }
+}
+
+start_dashboard() {
+  require_pm2
+  local host="0.0.0.0"
+  local port="8780"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --host)
+        host="${2:?--host needs a value}"
+        shift 2
+        ;;
+      --port)
+        port="${2:?--port needs a value}"
+        shift 2
+        ;;
+      *)
+        echo "Unknown dashboard option: $1" >&2
+        exit 2
+        ;;
+    esac
+  done
+  export REPLAY_DASHBOARD_HOST="$host"
+  export REPLAY_DASHBOARD_PORT="$port"
+  local pid=""
+  pid="$(pm2 pid "$DASH_NAME" 2>/dev/null || true)"
+  if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "pm2 ${DASH_NAME} already online (pid ${pid})"
+  else
+    if pm2 describe "$DASH_NAME" >/dev/null 2>&1; then
+      pm2 delete "$DASH_NAME" >/dev/null
+    fi
+    pm2 start "$ROOT/ecosystem.config.cjs" --only "$DASH_NAME" --update-env
+  fi
+  local i
+  for i in $(seq 1 20); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1; then
+      echo "Replay dashboard at http://127.0.0.1:${port}"
+      if [[ "$host" == "0.0.0.0" || "$host" == "::" ]]; then
+        local public_ip=""
+        public_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+        if [[ -n "$public_ip" ]]; then
+          echo "Replay dashboard at http://${public_ip}:${port}"
+        fi
+      else
+        echo "Replay dashboard at http://${host}:${port}"
+      fi
+      pm2 save >/dev/null
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "Replay dashboard did not answer on port ${port}" >&2
+  pm2 logs "$DASH_NAME" --lines 40 --nostream || true
+  exit 1
 }
 
 install_bench() {
@@ -86,7 +154,7 @@ case "$cmd" in
     exec "$PY" -m npa_archive sync "$@"
     ;;
   dashboard|serve)
-    exec "$PY" -m npa_archive dashboard "$@"
+    start_dashboard "$@"
     ;;
   replay)
     if [[ $# -lt 1 || ! -d "$1" ]]; then

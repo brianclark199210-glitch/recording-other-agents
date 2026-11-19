@@ -55,7 +55,7 @@ recording-agent/
 ./run.sh dashboard
 ```
 
-Then open http://127.0.0.1:8780. The page opens with the live round, mission, and reigning crown, then a paged round table (10 rows at a time). Click a round to expand rank, score, entry kind, code/replay status, and a **Crown** badge on that round's champion. A second **reigning** badge means that agent is the current private champion.
+`./run.sh dashboard` starts the page under pm2 as `npa-replay`, bound to `0.0.0.0:8780`. Open http://127.0.0.1:8780 on this machine, or `http://<this-host>:8780` from another machine. The page opens with the live round, mission, and reigning crown, then a paged round table (10 rows at a time). Click a round to expand rank, score, entry kind, code/replay status, and a **Crown** badge on that round's champion. A second **reigning** badge means that agent is the current private champion.
 
 Replay one saved agent (any nested path under that agent's folder works):
 
@@ -99,7 +99,7 @@ The example agent path in the upstream README (`examples/agents/log_gatherer`) i
 
 ## Dashboard
 
-The server is `neverplayalone_bench/dashboard/server.py`. It reads `data/rounds` and `agents` and does not call the network. Start it with `./run.sh dashboard`. The default port is 8780.
+The server is `neverplayalone_bench/dashboard/server.py`. It reads `data/rounds` and `agents` and does not call the network. `./run.sh dashboard` keeps it running with pm2 (`ecosystem.config.cjs`, app name `npa-replay`). The default bind is `0.0.0.0:8780`.
 
 ## Tests
 
